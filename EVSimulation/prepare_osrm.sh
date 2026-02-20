@@ -5,6 +5,17 @@ DATA_DIR="data"
 PROFILES_DIR="$DATA_DIR/profiles"
 PBF_FILE="$DATA_DIR/output.osm.pbf"
 
+gh repo clone Project-OSRM/osrm-backend
+cd osrm-backend 
+mkdir -p build
+cd build
+cmake ..
+make -j4
+sudo make install
+
+cd ..
+cd ..
+
 if [ ! -d "$PROFILES_DIR" ]; then
     echo "Fetching OSRM profiles..."
     wget -q -O "$DATA_DIR/osrm.zip" "https://github.com/Project-OSRM/osrm-backend/archive/refs/heads/master.zip"
@@ -24,4 +35,6 @@ osrm-contract "output.osm.pbf"
 
 echo "Returning to project root..."
 cd ..
+rm -rf osrm-backend
+
 echo "OSRM dataset preparation complete."
