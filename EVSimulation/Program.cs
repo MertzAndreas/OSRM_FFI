@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
+﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 
@@ -10,11 +7,12 @@ public class Station
     public int Id { get; set; }
     public double Lon { get; set; }
     public double Lat { get; set; }
+    public string? Hint { get; set; }
 }
 
 public class EvStationData
 {
-    public AddressInfo AddressInfo { get; set; }
+    public required AddressInfo AddressInfo { get; set; }
 }
 
 public class AddressInfo
@@ -129,7 +127,7 @@ public static class Program
     {
         string jsonPath = "denmark_ev_data_projected.json";
         var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        var evData = JsonSerializer.Deserialize<List<EvStationData>>(File.ReadAllText(jsonPath), options);
+        var evData = JsonSerializer.Deserialize<List<EvStationData>>(File.ReadAllText(jsonPath), options) ?? [];
 
         var benchmarkStations = evData.Select((data, index) => new Station
         {
@@ -138,20 +136,31 @@ public static class Program
             Lat = data.AddressInfo.Latitude
         }).ToList();
 
-        int totalStations = benchmarkStations.Count;
-        int[] allIndices = Enumerable.Range(0, totalStations).ToArray();
-
-        string dockerBaseUrl = "http://localhost:5000/table/v1/car/";
-        string stationsUrlSegment = string.Join(";", benchmarkStations.Select(s => $"{s.Lon:F6},{s.Lat:F6}"));
-
-        using var router = new OSRMRouter("/home/mertz/Gemini/denmark-latest.osrm");
-        router.InitStations(benchmarkStations);
-
         using var http = new HttpClient();
         http.Timeout = TimeSpan.FromMinutes(2);
 
+        int targetStationCount = 25;
+        var subsetStations = benchmarkStations.Take(targetStationCount).ToList();
+        int[] allIndices = Enumerable.Range(0, targetStationCount).ToArray();
+
+        Console.WriteLine("Fetching Docker hints for stations...");
+        foreach (var station in subsetStations)
+        {
+            string nearestUrl = $"http://localhost:5000/nearest/v1/car/{station.Lon:F6},{station.Lat:F6}";
+            string response = await http.GetStringAsync(nearestUrl);
+            using var doc = JsonDocument.Parse(response);
+            station.Hint = doc.RootElement.GetProperty("waypoints")[0].GetProperty("hint").GetString();
+        }
+
+        string dockerBaseUrl = "http://localhost:5000/table/v1/car/";
+        string stationsUrlSegment = string.Join(";", subsetStations.Select(s => $"{s.Lon:F6},{s.Lat:F6}"));
+        string hintsParam = "hints=;" + string.Join(";", subsetStations.Select(s => s.Hint));
+
+        using var router = new OSRMRouter("/home/mertz/Gemini/EVSimulation/data/output.osrm");
+        router.InitStations(benchmarkStations);
+
         int nativeIterations = 1000;
-        int dockerIterations = 10;
+        int dockerIterations = 1000;
         var rnd = new Random();
 
         var evCoordinates = new (double Lon, double Lat)[nativeIterations];
@@ -160,16 +169,16 @@ public static class Program
             evCoordinates[i] = (8.0 + rnd.NextDouble() * 4.5, 54.5 + rnd.NextDouble() * 3.0);
         }
 
-        Console.WriteLine($"--- STRICT 1x{totalStations} MATRIX BENCHMARK ---");
+        Console.WriteLine($"--- STRICT 1x{targetStationCount} MATRIX BENCHMARK ---");
 
-        Console.WriteLine($"Executing Docker HTTP ({dockerIterations} iterations only due to extreme overhead)...");
+        Console.WriteLine($"Executing Docker HTTP ({dockerIterations} iterations)...");
         double dockerAvg = 0;
         try
         {
             var sw = Stopwatch.StartNew();
             for (int i = 0; i < dockerIterations; i++)
             {
-                string fullUrl = $"{dockerBaseUrl}{evCoordinates[i].Lon:F6},{evCoordinates[i].Lat:F6};{stationsUrlSegment}?sources=0";
+                string fullUrl = $"{dockerBaseUrl}{evCoordinates[i].Lon:F6},{evCoordinates[i].Lat:F6};{stationsUrlSegment}?sources=0&{hintsParam}";
                 using var resp = await http.GetAsync(fullUrl);
                 resp.EnsureSuccessStatusCode();
             }
@@ -179,7 +188,7 @@ public static class Program
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"DOCKER FAILED: {ex.Message} (Likely exceeded OSRM max-table-size or URI length limits)");
+            Console.WriteLine($"DOCKER FAILED: {ex.Message}");
         }
 
         Console.WriteLine($"Executing Native P/Invoke ({nativeIterations} iterations)...");
