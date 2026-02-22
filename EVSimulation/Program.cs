@@ -1,209 +1,167 @@
-﻿using System.Diagnostics;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Text.Json;
 
 public class Station
 {
-    public int Id { get; set; }
-    public double Lon { get; set; }
-    public double Lat { get; set; }
-    public string? Hint { get; set; }
+  public int Id { get; set; }
+  public double Lon { get; set; }
+  public double Lat { get; set; }
 }
 
 public class EvStationData
 {
-    public required AddressInfo AddressInfo { get; set; }
+  public required AddressInfo AddressInfo { get; set; }
 }
 
 public class AddressInfo
 {
-    public double Latitude { get; set; }
-    public double Longitude { get; set; }
-}
-
-public class SpatialGrid
-{
-    private readonly double _cellSize;
-    private readonly Dictionary<(int x, int y), List<Station>> _cells = new();
-
-    public SpatialGrid(double cellSize = 0.1)
-    {
-        _cellSize = cellSize;
-    }
-
-    public void Add(Station station)
-    {
-        var key = (x: (int)(station.Lon / _cellSize), y: (int)(station.Lat / _cellSize));
-        if (!_cells.ContainsKey(key)) _cells[key] = new List<Station>();
-        _cells[key].Add(station);
-    }
-
-    public int[] GetNearbyIndices(double lon, double lat, int maxStations = 50)
-    {
-        var key = (x: (int)(lon / _cellSize), y: (int)(lat / _cellSize));
-        var candidates = new List<Station>();
-
-        for (int dx = -1; dx <= 1; dx++)
-        {
-            for (int dy = -1; dy <= 1; dy++)
-            {
-                if (_cells.TryGetValue((key.x + dx, key.y + dy), out var list))
-                {
-                    candidates.AddRange(list);
-                }
-            }
-        }
-
-        candidates.Sort((a, b) =>
-        {
-            double distA = (a.Lon - lon) * (a.Lon - lon) + (a.Lat - lat) * (a.Lat - lat);
-            double distB = (b.Lon - lon) * (b.Lon - lon) + (b.Lat - lat) * (b.Lat - lat);
-            return distA.CompareTo(distB);
-        });
-
-        int count = Math.Min(maxStations, candidates.Count);
-        int[] indices = new int[count];
-        for (int i = 0; i < count; i++) indices[i] = candidates[i].Id;
-        return indices;
-    }
+  public double Latitude { get; set; }
+  public double Longitude { get; set; }
 }
 
 public unsafe class OSRMRouter : IDisposable
 {
-    private const string Lib = "osrm_wrapper";
+  private const string Lib = "osrm_wrapper";
 
-    [DllImport(Lib)] private static extern IntPtr InitializeOSRM(string path);
-    [DllImport(Lib)] private static extern void RegisterStations(IntPtr osrm, double[] coords, int numStations);
-    [DllImport(Lib)] private static extern float* ComputeTableIndexed(IntPtr osrm, double evLon, double evLat, int[] indices, int numIndices, out int outSize);
-    [DllImport(Lib)] private static extern void FreeMemory(IntPtr ptr);
-    [DllImport(Lib)] private static extern void DeleteOSRM(IntPtr osrm);
+  [DllImport(Lib)] private static extern IntPtr InitializeOSRM(string path);
+  [DllImport(Lib)] private static extern void RegisterStations(IntPtr osrm, double[] coords, int numStations);
+  [DllImport(Lib)]
+  private static extern float* ComputeTableIndexed(
+      IntPtr osrm,
+      double evLon,
+      double evLat,
+      int[] indices,
+      int numIndices,
+      out int outSize);
 
-    private readonly IntPtr _osrm;
+  [DllImport(Lib)] private static extern void FreeMemory(IntPtr ptr);
+  [DllImport(Lib)] private static extern void DeleteOSRM(IntPtr osrm);
 
-    public OSRMRouter(string mapPath)
+  private readonly IntPtr _osrm;
+
+  public OSRMRouter(string mapPath)
+  {
+    _osrm = InitializeOSRM(mapPath);
+    if (_osrm == IntPtr.Zero)
+      throw new Exception("OSRM init failed.");
+  }
+
+  public void InitStations(List<Station> stations)
+  {
+    double[] coords = new double[stations.Count * 2];
+
+    for (int i = 0; i < stations.Count; i++)
     {
-        _osrm = InitializeOSRM(mapPath);
-        if (_osrm == IntPtr.Zero) throw new Exception("OSRM init failed.");
+      stations[i].Id = i;
+      coords[i * 2] = stations[i].Lon;
+      coords[i * 2 + 1] = stations[i].Lat;
     }
 
-    public void InitStations(List<Station> stations)
+    RegisterStations(_osrm, coords, stations.Count);
+  }
+
+  public float[] QueryStations(double evLon, double evLat, int[] indices)
+  {
+    if (indices.Length == 0)
+      return [];
+
+    float* ptr = ComputeTableIndexed(_osrm, evLon, evLat, indices, indices.Length, out int size);
+
+    if (ptr == null || size <= 0)
+      return [];
+
+    float[] result = new float[size];
+
+    fixed (float* dest = result)
     {
-        double[] coords = new double[stations.Count * 2];
-        for (int i = 0; i < stations.Count; i++)
-        {
-            stations[i].Id = i;
-            coords[i * 2] = stations[i].Lon;
-            coords[i * 2 + 1] = stations[i].Lat;
-        }
-        RegisterStations(_osrm, coords, stations.Count);
+      Buffer.MemoryCopy(ptr, dest, size * sizeof(float), size * sizeof(float));
     }
 
-    public float[] Query(double evLon, double evLat, int[] prunedIndices)
-    {
-        if (prunedIndices.Length == 0) return Array.Empty<float>();
+    FreeMemory((IntPtr)ptr);
+    return result;
+  }
 
-        int size;
-        float* ptr = ComputeTableIndexed(_osrm, evLon, evLat, prunedIndices, prunedIndices.Length, out size);
-        if (ptr == null) return Array.Empty<float>();
-
-        float[] result = new float[size];
-        fixed (float* dest = result)
-        {
-            Buffer.MemoryCopy(ptr, dest, size * 4, size * 4);
-        }
-
-        FreeMemory((IntPtr)ptr);
-        return result;
-    }
-
-    public void Dispose() => DeleteOSRM(_osrm);
+  public void Dispose()
+  {
+    DeleteOSRM(_osrm);
+  }
 }
-
-
 
 public static class Program
 {
-    public static async Task Main()
+  public static void Main()
+  {
+    string jsonPath = "denmark_ev_data_projected.json";
+    var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+    var evData = JsonSerializer.Deserialize<List<EvStationData>>(
+        File.ReadAllText(jsonPath),
+        options) ?? [];
+
+    int targetStationCount = evData.Count; // Use all stations from the JSON file
+
+    var stations = evData
+        .Take(targetStationCount)
+        .Select((data, index) => new Station
+        {
+          Id = index,
+          Lon = data.AddressInfo.Longitude,
+          Lat = data.AddressInfo.Latitude
+        })
+        .ToList();
+
+    int[] indices = Enumerable.Range(0, stations.Count).ToArray();
+
+    using var router = new OSRMRouter(
+        "/home/mertz/Coding/OSRM_FFI/EVSimulation/data/denmark-latest.osrm");
+
+    router.InitStations(stations);
+
+    var evCoordinates = new (double Lon, double Lat)[]
     {
-        string jsonPath = "denmark_ev_data_projected.json";
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        var evData = JsonSerializer.Deserialize<List<EvStationData>>(File.ReadAllText(jsonPath), options) ?? [];
+            (9.9410, 57.2706),  // Brønderslev
+            (9.9217, 57.0488),  // Aalborg
+            (10.0364, 56.4606), // Randers
+            (10.2039, 56.1629), // Aarhus
+            (12.5683, 55.6761), // København
+    };
 
-        var benchmarkStations = evData.Select((data, index) => new Station
+
+
+    var minusOneStations = new List<(int EvIndex, Station Station)>();
+    uint numberOfMinus1 = 0;
+
+    for (int i = 0; i < evCoordinates.Length; i++)
+    {
+      var (lon, lat) = evCoordinates[i];
+
+      float[] durations = router.QueryStations(lon, lat, indices);
+
+      Console.WriteLine($"Query {i + 1} ({lon}, {lat}):");
+
+      for (int j = 0; j < durations.Length; j++)
+      {
+        if (durations[j] < 0)
         {
-            Id = index,
-            Lon = data.AddressInfo.Longitude,
-            Lat = data.AddressInfo.Latitude
-        }).ToList();
-
-        using var http = new HttpClient();
-        http.Timeout = TimeSpan.FromMinutes(2);
-
-        int targetStationCount = 25;
-        var subsetStations = benchmarkStations.Take(targetStationCount).ToList();
-        int[] allIndices = Enumerable.Range(0, targetStationCount).ToArray();
-
-        Console.WriteLine("Fetching Docker hints for stations...");
-        foreach (var station in subsetStations)
-        {
-            string nearestUrl = $"http://localhost:5000/nearest/v1/car/{station.Lon:F6},{station.Lat:F6}";
-            string response = await http.GetStringAsync(nearestUrl);
-            using var doc = JsonDocument.Parse(response);
-            station.Hint = doc.RootElement.GetProperty("waypoints")[0].GetProperty("hint").GetString();
+          minusOneStations.Add((i, stations[j]));
+          numberOfMinus1++;
         }
-
-        string dockerBaseUrl = "http://localhost:5000/table/v1/car/";
-        string stationsUrlSegment = string.Join(";", subsetStations.Select(s => $"{s.Lon:F6},{s.Lat:F6}"));
-        string hintsParam = "hints=;" + string.Join(";", subsetStations.Select(s => s.Hint));
-
-        using var router = new OSRMRouter("/home/mertz/Gemini/EVSimulation/data/output.osrm");
-        router.InitStations(benchmarkStations);
-
-        int nativeIterations = 1000;
-        int dockerIterations = 1000;
-        var rnd = new Random();
-
-        var evCoordinates = new (double Lon, double Lat)[nativeIterations];
-        for (int i = 0; i < nativeIterations; i++)
-        {
-            evCoordinates[i] = (8.0 + rnd.NextDouble() * 4.5, 54.5 + rnd.NextDouble() * 3.0);
-        }
-
-        Console.WriteLine($"--- STRICT 1x{targetStationCount} MATRIX BENCHMARK ---");
-
-        Console.WriteLine($"Executing Docker HTTP ({dockerIterations} iterations)...");
-        double dockerAvg = 0;
-        try
-        {
-            var sw = Stopwatch.StartNew();
-            for (int i = 0; i < dockerIterations; i++)
-            {
-                string fullUrl = $"{dockerBaseUrl}{evCoordinates[i].Lon:F6},{evCoordinates[i].Lat:F6};{stationsUrlSegment}?sources=0&{hintsParam}";
-                using var resp = await http.GetAsync(fullUrl);
-                resp.EnsureSuccessStatusCode();
-            }
-            sw.Stop();
-            dockerAvg = sw.Elapsed.TotalMilliseconds / dockerIterations;
-            Console.WriteLine($"DOCKER: {dockerAvg:F4}ms per query");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"DOCKER FAILED: {ex.Message}");
-        }
-
-        Console.WriteLine($"Executing Native P/Invoke ({nativeIterations} iterations)...");
-        var swNative = Stopwatch.StartNew();
-        for (int i = 0; i < nativeIterations; i++)
-        {
-            float[] durations = router.Query(evCoordinates[i].Lon, evCoordinates[i].Lat, allIndices);
-        }
-        swNative.Stop();
-        double nativeAvg = swNative.Elapsed.TotalMilliseconds / nativeIterations;
-        Console.WriteLine($"NATIVE: {nativeAvg:F4}ms per query");
-
-        if (dockerAvg > 0)
-        {
-            Console.WriteLine($"Performance Multiplier: {dockerAvg / nativeAvg:F2}x faster");
-        }
+      }
     }
+
+    Console.WriteLine($"Total number of -1 durations: {numberOfMinus1}");
+    Console.WriteLine("EV coordinate → stations with -1 durations:");
+
+    foreach (var group in minusOneStations.GroupBy(e => e.EvIndex))
+    {
+      var ev = evCoordinates[group.Key];
+      Console.WriteLine($"EV {group.Key} ({ev.Lat}, {ev.Lon}):");
+      foreach (var entry in group)
+      {
+        var s = entry.Station;
+        Console.WriteLine($"  Station {s.Id}: ({s.Lat}, {s.Lon})");
+      }
+    }
+  }
+
 }

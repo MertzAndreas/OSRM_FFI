@@ -1,0 +1,8 @@
+**/build
+
+EVSimulation/bin
+EVSimulation/obj
+EVSimulation/data
+
+include/
+osrm-backend/
