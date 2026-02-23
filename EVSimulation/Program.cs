@@ -113,7 +113,7 @@ public static class Program
     int[] indices = Enumerable.Range(0, stations.Count).ToArray();
 
     using var router = new OSRMRouter(
-        "/home/mertz/Coding/OSRM_FFI/EVSimulation/data/denmark-latest.osrm");
+        "/home/mertz/Coding/OSRM_FFI/EVSimulation/data/output.osrm");
 
     router.InitStations(stations);
 

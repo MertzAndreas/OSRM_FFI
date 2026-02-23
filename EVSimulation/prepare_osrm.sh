@@ -1,11 +1,18 @@
-
-#!/bin/bash
 set -e
 
 DATA_DIR="data"
 PROFILES_DIR="$DATA_DIR/profiles"
-PBF_URL="https://download.geofabrik.de/europe/denmark-latest.osm.pbf"
-PBF_FILE="$DATA_DIR/denmark-latest.osm.pbf"
+
+gh repo clone Project-OSRM/osrm-backend
+cd osrm-backend
+mkdir -p build
+cd build
+cmake ..
+make -j4
+sudo make install
+
+cd ..
+cd ..
 
 mkdir -p "$DATA_DIR"
 
@@ -17,22 +24,18 @@ if [ ! -d "$PROFILES_DIR" ]; then
     rm -rf "$DATA_DIR/osrm-backend-master" "$DATA_DIR/osrm.zip"
 fi
 
-if [ ! -f "$PBF_FILE" ]; then
-    echo "Downloading PBF file..."
-    wget -q -O "$PBF_FILE" "$PBF_URL"
-else
-    echo "PBF file already exists, skipping download."
-fi
-
 echo "Changing working directory to data..."
+cp output.osm.pbf "$DATA_DIR"/output.osm.pbf
 cd "$DATA_DIR"
 
 echo "Running OSRM extract..."
-osrm-extract -p "profiles/car.lua" "denmark-latest.osm.pbf"
+osrm-extract -p "profiles/car.lua" "output.osm.pbf"
 
 echo "Running OSRM contract (CH pipeline)..."
-osrm-contract "denmark-latest.osm.pbf"
+osrm-contract "output.osm.pbf"
 
 echo "Returning to project root..."
 cd ..
+rm -rf osrm-backend
+
 echo "OSRM dataset preparation complete."
