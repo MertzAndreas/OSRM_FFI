@@ -126,11 +126,6 @@ public static class Program
             (12.5683, 55.6761), // København
     };
 
-
-
-    var minusOneStations = new List<(int EvIndex, Station Station)>();
-    uint numberOfMinus1 = 0;
-
     for (int i = 0; i < evCoordinates.Length; i++)
     {
       var (lon, lat) = evCoordinates[i];
@@ -141,25 +136,7 @@ public static class Program
 
       for (int j = 0; j < durations.Length; j++)
       {
-        if (durations[j] < 0)
-        {
-          minusOneStations.Add((i, stations[j]));
-          numberOfMinus1++;
-        }
-      }
-    }
-
-    Console.WriteLine($"Total number of -1 durations: {numberOfMinus1}");
-    Console.WriteLine("EV coordinate → stations with -1 durations:");
-
-    foreach (var group in minusOneStations.GroupBy(e => e.EvIndex))
-    {
-      var ev = evCoordinates[group.Key];
-      Console.WriteLine($"EV {group.Key} ({ev.Lat}, {ev.Lon}):");
-      foreach (var entry in group)
-      {
-        var s = entry.Station;
-        Console.WriteLine($"  Station {s.Id}: ({s.Lat}, {s.Lon})");
+        Console.WriteLine($"  Station {j}: {durations[j]}s");
       }
     }
   }

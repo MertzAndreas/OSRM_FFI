@@ -6,3 +6,6 @@ EVSimulation/data
 
 include/
 osrm-backend/
+.cache/
+
+EVSimulation/EVSimulation.sln
