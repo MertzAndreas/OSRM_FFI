@@ -27,7 +27,7 @@ void RegisterStations(osrm::OSRM *osrm, double *coords, int numStations) {
     params.coordinates.push_back(c);
     // Add a radius in meters to limit the search, or leave empty for default.
     // OSRM will snap to the nearest edge within this radius.
-    params.radiuses.push_back(500.0);
+    params.radiuses.push_back(100.0);
 
     osrm::engine::api::ResultT result;
     bool found = false;

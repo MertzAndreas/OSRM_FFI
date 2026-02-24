@@ -1,5 +1,10 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
+
+
+
+
 
 public class Station
 {
@@ -162,6 +167,80 @@ public static class Program
         Console.WriteLine($"  Station {s.Id}: ({s.Lat}, {s.Lon})");
       }
     }
+
+
+
+    var sw = Stopwatch.StartNew();
+    var chargingModel = new ChargingModel(0.0001);
+    sw.Stop();
+
+    Console.WriteLine($"Build time: {sw.Elapsed.TotalMilliseconds:F3} ms");
+
+    //---------------------------------
+    // USER EXAMPLE
+    //---------------------------------
+    double socStart = 0.05;
+    double socEnd = 1;
+    double capacity = 83.9;
+    double charger = 205;
+
+    double hours = chargingModel.GetChargingTimeHours(
+        socStart,
+        socEnd,
+        capacity,
+        charger);
+
+    Console.WriteLine($"Charging time: {hours * 60:F1} minutes");
+
+
+    //---------------------------------
+    // SINGLE CALL BENCHMARK
+    //---------------------------------
+    sw.Restart();
+
+    for (int i = 0; i < 1_000_000; i++)
+    {
+      chargingModel.GetChargingTimeHours(
+          socStart, socEnd, capacity, charger);
+    }
+
+    sw.Stop();
+
+    Console.WriteLine(
+        $"1M calls: {sw.Elapsed.TotalMilliseconds:F2} ms");
+
+
+    //---------------------------------
+    // LARGE PERFORMANCE TEST
+    //---------------------------------
+    const int N = 10_000_000;
+
+    sw.Restart();
+
+    double sum = 0; // prevents optimizer removing calls
+
+    for (int i = 0; i < N; i++)
+    {
+      sum += chargingModel.GetChargingTimeHours(
+          socStart, socEnd, capacity, charger);
+    }
+
+    sw.Stop();
+
+    double nsPerCall =
+        sw.Elapsed.TotalMilliseconds * 1_000_000 / N;
+
+    Console.WriteLine($"10M calls: {sw.Elapsed.TotalSeconds:F3} s");
+    Console.WriteLine($"Avg time per call: {nsPerCall:F1} ns");
+
+    Console.WriteLine(sum); // anti-optimization
+
+
   }
 
 }
+
+
+
+
+
