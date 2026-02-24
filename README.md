@@ -2,7 +2,8 @@ You need these packages to run the project:
 
 **Arch Linux (pacman/yay/paru):**
 ```bash
-yay -S base-devel git cmake pkgconf bzip2 libxml2 libzip boost lua52 tbb
+yay -S base-devel git cmake pkgconf bzip2 libxml2 libzip boost lua52 tbb git-lfs
+git lfs install
 ```
 
 **Ubuntu/Debian (apt-get):**
