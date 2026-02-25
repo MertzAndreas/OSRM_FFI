@@ -54,14 +54,10 @@ check_dependencies() {
     local os=$(detect_os)
     echo "Detected OS: $os"
     
-    # Handle special cases
-    case "$os" in
-        "unknown")
-            echo "Unknown OS"
-            exit 1
-            return
-            ;;
-    esac
+    if [[ "$os" == "unknown" ]]; then
+        echo "Unsupported OS"
+        exit 1
+    fi
     
     local packages=(${PACKAGE_MAPS[$os]})
     local missing=()
