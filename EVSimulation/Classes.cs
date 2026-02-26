@@ -26,9 +26,9 @@ class Charger(int id, int PowerKW, Socket socket)
 class EV(uint id, Position position, Battery battery, Preferences preferences)
 {
   public readonly uint id = id;
+  public readonly Preferences Preferences = preferences;
   private Position position = position;
   private Battery battery = battery;
-  public readonly Preferences Preferences = preferences;
 
   // Methods that update battery
 }
@@ -46,8 +46,6 @@ class Battery(float capacity, float maxChargeRate, float currentCharge, Socket s
   public readonly float maxChargeRate = maxChargeRate;
   public float CurrentCharge { get; } = currentCharge;
   public readonly Socket Socket = socket;
-
-
 }
 
 class Journey(Time depature, Path path)
@@ -63,7 +61,7 @@ class Path(List<Position> waypoints)
   public List<Position> Waypoints { get; } = waypoints;
 }
 
-enum Socket
+public enum Socket
 {
   CHADEMO,
   CCS,

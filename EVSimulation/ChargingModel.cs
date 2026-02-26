@@ -4,14 +4,12 @@ public class ChargingModel
   private readonly double[] tRef;
   private readonly double ds;
 
-  // -------------------------------
-  // Constructor builds lookup table
-  // -------------------------------
+
   public ChargingModel(double stepSize = 0.001)
   {
     ds = stepSize;
 
-    int n = (int)(1.0 / ds) + 1;
+    int n = (int)((1.0 / ds) + 1);
 
     socGrid = new double[n];
     tRef = new double[n];
@@ -26,23 +24,23 @@ public class ChargingModel
   private double PowerFraction(double soc)
   {
     if (soc < 0.1)
+    {
       return 0.5 + 5 * soc;          // ramp up
+    }
 
     if (soc < 0.8)
+    {
       return 1.0;                    // constant region
+    }
 
     double taper = 1.0 - 3 * (soc - 0.8);
     return Math.Max(0.2, taper);       // taper down
   }
 
-  // ---------------------------------
-  // Build cumulative reference time
-  // ---------------------------------
   private void BuildReferenceTable()
   {
     tRef[0] = 0.0;
     socGrid[0] = 0.0;
-
     for (int i = 0; i < socGrid.Length - 1; i++)
     {
       double s = i * ds;
@@ -50,7 +48,6 @@ public class ChargingModel
 
       double powerFrac = PowerFraction(s);
 
-      // small time increment
       double dt = ds / powerFrac;
 
       tRef[i + 1] = tRef[i] + dt;
@@ -59,9 +56,6 @@ public class ChargingModel
     socGrid[^1] = 1.0;
   }
 
-  // ---------------------------------
-  // Fast charging time lookup
-  // ---------------------------------
   public double GetChargingTimeHours(
       double socStart,
       double socEnd,
@@ -79,7 +73,7 @@ public class ChargingModel
 
     double referenceTime = tRef[i2] - tRef[i1];
 
-    // scale to real system
+
     return batteryCapacityKWh / chargerPowerKW * referenceTime;
   }
 }

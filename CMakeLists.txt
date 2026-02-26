@@ -1,43 +1,44 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.15)
 project(osrm_wrapper LANGUAGES CXX)
-
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_BUILD_TYPE Release)
 
-
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(OSRM REQUIRED libosrm)
-
-find_package(Threads REQUIRED)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
 
 find_package(Boost REQUIRED COMPONENTS iostreams filesystem thread)
+find_package(Threads REQUIRED)
 
+include(FetchContent)
+FetchContent_Declare(
+  osrm_backend
+  GIT_REPOSITORY https://github.com/Project-OSRM/osrm-backend.git
+  GIT_TAG 362b388d7e0582291662105d7bfc004a3a44a393
+)
+
+
+
+FetchContent_MakeAvailable(osrm_backend)
+
+# --- Your wrapper ---
 add_library(osrm_wrapper SHARED osrm_wrapper.cpp)
 
+# PLACE THE NEW DIRECTORIES HERE:
 target_include_directories(osrm_wrapper PRIVATE
-        ${OSRM_INCLUDE_DIRS}
-        ${Boost_INCLUDE_DIRS}
+    ${osrm_backend_SOURCE_DIR}/include
+    ${osrm_backend_SOURCE_DIR}/third_party/variant/include
+    ${osrm_backend_SOURCE_DIR}/third_party/stxxl/include
+    ${Boost_INCLUDE_DIRS}
 )
-
-if(NOT TARGET Boost::system)
-    if(TARGET Boost::headers)
-        add_library(Boost::system ALIAS Boost::headers)
-    endif()
-endif()
 
 target_link_libraries(osrm_wrapper PRIVATE
-        ${OSRM_LIBRARIES}
-        Boost::iostreams
-        Boost::filesystem
-        Boost::thread
-        Threads::Threads
+    osrm
+    ${Boost_LIBRARIES}
+    Threads::Threads
 )
 
-if(TARGET Boost::system)
-    target_link_libraries(osrm_wrapper PRIVATE Boost::system)
+if(WIN32)
+    set_target_properties(osrm_wrapper PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 endif()
-
-target_compile_options(osrm_wrapper PRIVATE ${OSRM_CFLAGS_OTHER})

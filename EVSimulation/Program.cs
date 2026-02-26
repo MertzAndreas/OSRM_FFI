@@ -15,7 +15,7 @@ public class Station
 
 public class EvStationData
 {
-  public required AddressInfo AddressInfo { get; set; }
+  required public AddressInfo AddressInfo { get; set; }
 }
 
 public class AddressInfo
@@ -111,7 +111,7 @@ public static class Program
         {
           Id = index,
           Lon = data.AddressInfo.Longitude,
-          Lat = data.AddressInfo.Latitude
+          Lat = data.AddressInfo.Latitude,
         })
         .ToList();
 
@@ -130,8 +130,6 @@ public static class Program
             (10.2039, 56.1629), // Aarhus
             (12.5683, 55.6761), // København
     };
-
-
 
     var minusOneStations = new List<(int EvIndex, Station Station)>();
     uint numberOfMinus1 = 0;
@@ -159,8 +157,8 @@ public static class Program
 
     foreach (var group in minusOneStations.GroupBy(e => e.EvIndex))
     {
-      var ev = evCoordinates[group.Key];
-      Console.WriteLine($"EV {group.Key} ({ev.Lat}, {ev.Lon}):");
+      var (Lon, Lat) = evCoordinates[group.Key];
+      Console.WriteLine($"EV {group.Key} ({Lat}, {Lon}):");
       foreach (var entry in group)
       {
         var s = entry.Station;
@@ -192,7 +190,6 @@ public static class Program
 
     Console.WriteLine($"Charging time: {hours * 60:F1} minutes");
 
-
     //---------------------------------
     // SINGLE CALL BENCHMARK
     //---------------------------------
@@ -208,7 +205,6 @@ public static class Program
 
     Console.WriteLine(
         $"1M calls: {sw.Elapsed.TotalMilliseconds:F2} ms");
-
 
     //---------------------------------
     // LARGE PERFORMANCE TEST
@@ -234,13 +230,5 @@ public static class Program
     Console.WriteLine($"Avg time per call: {nsPerCall:F1} ns");
 
     Console.WriteLine(sum); // anti-optimization
-
-
   }
-
 }
-
-
-
-
-
